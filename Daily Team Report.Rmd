@@ -1,0 +1,366 @@
+---
+
+
+
+---
+
+<center>
+# **Milwaukee Brewers** 
+</center>
+
+<center>
+## Daily Team Report
+</center>
+
+
+
+<br><br><br>
+<center>
+![](C:\Programming\Projects\mlbproject\brewers_logo.png){width=20%}
+</center>
+<br><br><br>
+
+
+
+```{python include=FALSE}
+#import packages
+import pandas as pd
+import matplotlib.pyplot as plt
+import sqlite3 
+```
+
+```{r include=FALSE}
+library(reticulate)
+library(ggplot2)
+library(tidyverse)
+library(grid)
+library(RColorBrewer)
+library(ggforce)
+
+```
+
+
+```{python include=FALSE}
+#create sql connection
+connection = sqlite3.connect('C:\Programming\Projects\mlbproject\mlb.db')
+
+team_batting = pd.read_sql_query("select * from team_batting where team = 'MIL'",connection)
+
+team_batting_ranks = pd.read_sql_query("select * from team_batting_ranks where team = 'MIL'",connection)
+
+team_pitching = pd.read_sql_query("select * from team_pitching where team = 'MIL'",connection)
+
+team_pitching_ranks = pd.read_sql_query("select * from team_pitching_ranks where team = 'MIL'",connection)
+
+standings = pd.read_sql_query("select Team, Wins as 'Wins', Losses as 'Losses', win_pct as 'Winning Percentage', run_differential as 'Run Differential' from standings where division = 'NL Central' order by Wins desc",connection)
+
+batter = pd.read_sql_query("select batter_standard.Name, batter_standard.POS, batter_standard.PA, AB, HR, AVG, OBP, SLG, OPS, BB_PCT as 'BB%', K_PCT as 'K%', woba, xwobacon from batter_standard left join batter_advanced on batter_standard.batter = batter_advanced.batter where batter_standard.team = 'MIL' order by woba desc",connection)
+
+pitcher = pd.read_sql_query("select player_name as 'Name', IP, H, R, HR, BB, K, RA9, BB_pct as 'BB%', K_pct as 'K%' From pitcher_standard where Team ='MIL' order by K desc", connection)
+
+run_differential = pd.read_sql_query("select * from run_differential where Team in ('MIL','CHC','STL','PIT','CIN')", connection)
+
+batting_woba = pd.read_sql_query("select * from team_woba_batting_rolling where Team = 'MIL'",connection)
+
+pitching_woba = pd.read_sql_query("select * from team_woba_pitching_rolling where Team = 'MIL'",connection)
+
+batter_woba_rolling = pd.read_sql_query("select * from batter_woba_rolling where Team = 'MIL'",connection)
+
+pitcher_woba_rolling = pd.read_sql_query("select * from pitcher_woba_rolling where Team = 'MIL'",connection)
+
+connection.close()
+```
+
+```{r echo=FALSE}
+knitr::kable(py$standings,format='markdown')
+```
+
+<br><br><br>
+<center>
+
+```{r echo=FALSE}
+run_differential_df = reticulate::py$run_differential
+
+max_game = run_differential_df %>% 
+           group_by(Team) %>%
+           filter(game_number==max(game_number))
+
+ggplot(run_differential_df, aes(x = game_number)) +
+  geom_line(data = run_differential_df %>% filter(Team == 'MIL'),aes(x=game_number,y=Total,color = "MIL"), size = 1.5, alpha = .95) +
+  geom_line(data = run_differential_df %>% filter(Team == 'STL'),aes(x=game_number,y=Total,color = "STL"), size = 1.5, alpha = .55) +
+  geom_line(data = run_differential_df %>% filter(Team == 'CHC'),aes(x=game_number,y=Total,color = "CHC"), size = 1.5, alpha = .55) +
+  geom_line(data = run_differential_df %>% filter(Team == 'CIN'),aes(x=game_number,y=Total,color = "CIN"), size = 1.5, alpha = .55) +
+  geom_line(data = run_differential_df %>% filter(Team == 'PIT'),aes(x=game_number,y=Total,color = "PIT"), size = 1.5, alpha = .55) +
+  geom_text(data = max_game,aes(y=max_game$Total,label=Team),nudge_x = 5) +
+  scale_color_manual(name = "Team", values = c("MIL" = "#12284B", "STL" = "#C41E3A", "CHC" = "#0E3386", "CIN" = "#C6011F", "PIT" = "#FDB827")) +
+  labs(x = "Game Number", y = "Run Differential") +
+  ggtitle("Rolling Run Differential") +
+  scale_y_continuous(breaks=seq(-175,150,25)) +
+  scale_x_continuous(breaks=seq(0,162,25)) +
+  theme(plot.title = element_text(face='bold',hjust = 0.5))  +
+  theme(legend.position = "none") +
+  theme(panel.background = element_blank()) +
+  theme(panel.grid.major.y = element_line(color = "grey", size = .05)) +
+  theme(axis.text.x = element_text(size = 7))
+
+
+```
+</center>
+<br><br><br>
+
+### Team Batting Stats
+
+```{r echo=FALSE}
+knitr::kable(py$team_batting,format='markdown')
+```
+
+<br><br><br>
+
+### Team Batting Rankings 
+
+```{r echo=FALSE}
+knitr::kable(py$team_batting_ranks,format='markdown')
+```
+
+<br><br><br>
+<center>
+
+```{r echo=FALSE}
+team_batting_woba = reticulate::py$batting_woba
+
+max_woba = team_batting_woba %>% 
+           filter(game_number==max(game_number))
+
+average_woba = .317
+
+team_batting_woba$average_woba = average_woba
+
+team_batting_woba$difference = team_batting_woba$rolling_average_woba - team_batting_woba$average_woba
+
+team_batting_woba$color = ifelse(team_batting_woba$rolling_average_woba > average_woba, "Green4","#C41E3A")
+
+max_woba$rolling_average_woba = round(max_woba$rolling_average_woba, digits = 3)
+
+
+ggplot(team_batting_woba, aes(x = game_number, y = rolling_average_woba)) +
+ geom_link2(lwd=1.4,aes(colour = after_stat(y < average_woba),alpha = .75)) +
+  scale_colour_manual(values = team_batting_woba$color) +
+  geom_text(data = max_woba,aes(y=max_woba$rolling_average_woba,label=rolling_average_woba),nudge_x = 5) +
+  geom_hline(yintercept = as.numeric(average_woba), linetype = 'dotted') +
+  annotate("text", x = 13, y = .350, label = "League Average wOBA", size = 2.65) +
+  annotate("segment", x = 13, xend = 13, y = 0.342, yend = 0.320, size = .75,arrow = arrow()) +
+  labs(x = "Game Number", y = "wOBA") +
+  ggtitle("10 Game Rolling Batting wOBA") +
+  scale_x_continuous(breaks=seq(0,162,25)) +
+  scale_y_continuous(breaks=seq(0,.50,.025)) +
+  theme(plot.title = element_text(face='bold',hjust = 0.5))  +
+  theme(axis.text.x = element_text(face="bold")) +
+  theme(axis.text.y = element_text(face="bold")) +
+  theme(legend.position = "none") +
+  theme(axis.ticks.x=element_blank()) +
+  theme(axis.text.x = element_text(face="bold")) +
+  theme(axis.text.y = element_text(face="bold")) +
+  theme(panel.background = element_blank()) +
+  theme(axis.ticks.y=element_blank())
+
+
+
+```
+
+</center>
+
+<br><br><br>
+
+### Team Pitching Stats
+
+```{r echo=FALSE}
+knitr::kable(py$team_pitching,format='markdown')
+```
+
+
+<br><br><br>
+
+### Team Pitching Rankings
+
+```{r echo=FALSE}
+knitr::kable(py$team_pitching_ranks,format='markdown')
+```
+
+<center>
+
+<br><br><br>
+
+```{r echo=FALSE}
+team_pitching_woba = reticulate::py$pitching_woba
+
+max_woba_p = team_pitching_woba %>% 
+           filter(game_number==max(game_number))
+
+
+team_pitching_woba$average_woba = average_woba
+
+team_pitching_woba$difference = team_pitching_woba$rolling_average_woba - team_pitching_woba$average_woba
+
+team_pitching_woba$color = ifelse(team_pitching_woba$rolling_average_woba > average_woba, "#C41E3A","Green4")
+
+max_woba_p$rolling_average_woba = round(max_woba_p$rolling_average_woba, digits = 3)
+
+
+ggplot(team_pitching_woba, aes(x = game_number, y = rolling_average_woba)) +
+  geom_link2(lwd=1.4,aes(colour = after_stat(y < average_woba),alpha = .75)) +
+  scale_colour_manual(values = c("#C41E3A","Green4")) +
+  geom_text(data = max_woba_p,aes(y=max_woba_p$rolling_average_woba,label=rolling_average_woba),nudge_x = 5) +
+  geom_hline(yintercept = as.numeric(average_woba), linetype = 'dotted') +
+  annotate("text", x = 15, y = .350, label = "League Average wOBA", size = 2.65) +
+  annotate("segment", x = 13, xend = 13, y = 0.342, yend = 0.320, size = .75,arrow = arrow()) +
+  labs(x = "Game Number", y = "wOBA") +
+  ggtitle("10 Game Rolling Pitching wOBA") +
+  scale_x_continuous(breaks=seq(0,162,25)) +
+  scale_y_continuous(breaks=seq(0,.50,.025)) +
+  theme(plot.title = element_text(face='bold',hjust = 0.5))  +
+  theme(axis.text.x = element_text(face="bold")) +
+  theme(axis.text.y = element_text(face="bold")) +
+  theme(legend.position = "none") +
+  theme(axis.ticks.x=element_blank()) +
+  theme(panel.background = element_blank()) +
+  theme(axis.ticks.y=element_blank())
+
+
+
+```
+
+
+
+</center>
+
+
+<br><br><br>
+
+<center>
+
+### Player Batting Stats
+
+</center>
+
+<br>
+
+<center>
+
+```{r echo=FALSE}
+knitr::kable(py$batter,format='markdown')
+
+```
+
+</center>
+
+<br><br><br>
+
+<center>
+
+```{r echo=FALSE}
+batter_woba_rolling_r = reticulate::py$batter_woba_rolling
+
+batter_max_woba = batter_woba_rolling_r %>% 
+           filter(PA==max(PA))
+
+batter_woba_rolling_r$average_woba = average_woba
+
+batter_woba_rolling_r$difference = batter_woba_rolling_r$rolling_average_woba - batter_woba_rolling_r$average_woba
+
+batter_woba_rolling_r$color = ifelse(batter_woba_rolling_r$rolling_average_woba > average_woba, "Green4","#C41E3A")
+
+batter_max_woba$rolling_average_woba = round(batter_max_woba$rolling_average_woba, digits = 3)
+
+ggplot(batter_woba_rolling_r, aes(x = PA, y = rolling_average_woba)) +
+  geom_link2(lwd = 1,aes(colour = after_stat(y > average_woba),alpha = .55)) +
+  scale_colour_manual(values = c("#C41E3A","Green4")) +
+  geom_hline(yintercept = as.numeric(average_woba), linetype = 'dotted') +
+  facet_wrap(~ playername) +
+  ggtitle("50 Plate Appearances Rolling wOBA") +
+  scale_x_continuous(breaks=seq(0,500,50)) +
+  scale_y_continuous(breaks=seq(0,.650,.025)) +
+  theme(plot.title = element_text(face='bold',hjust = 0.5))  +
+  theme(legend.position = "none") +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        strip.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        plot.title = element_text(size = 12))
+
+
+
+
+
+
+```
+</center>
+
+<br><br><br>
+
+<center>
+
+### Player Pitching Stats
+
+</center>
+
+<br>
+
+<center>
+
+```{r echo=FALSE}
+knitr::kable(py$pitcher,format='markdown')
+```
+
+</center>
+
+<br><br><br>
+
+<center>
+
+```{r echo=FALSE}
+pitcher_woba_rolling_r = reticulate::py$pitcher_woba_rolling
+
+pitcher_max_woba = pitcher_woba_rolling_r %>% 
+           filter(PA==max(PA))
+
+pitcher_woba_rolling_r$average_woba = average_woba
+
+pitcher_woba_rolling_r$difference = pitcher_woba_rolling_r$rolling_average_woba - pitcher_woba_rolling_r$average_woba
+
+pitcher_woba_rolling_r$color = ifelse(pitcher_woba_rolling_r$rolling_average_woba > average_woba, "Green4","#C41E3A")
+
+pitcher_max_woba$rolling_average_woba = round(pitcher_max_woba$rolling_average_woba, digits = 3)
+
+ggplot(pitcher_woba_rolling_r, aes(x = PA, y = rolling_average_woba)) +
+  geom_link2(lwd = 1,aes(colour = after_stat(y < average_woba),alpha = .55)) +
+  scale_colour_manual(values = c("#C41E3A","Green4")) +
+  geom_hline(yintercept = as.numeric(average_woba), linetype = 'dotted') +
+  facet_wrap(~ playername) +
+  ggtitle("50 Plate Appearances Rolling wOBA") +
+  scale_x_continuous(breaks=seq(0,500,50)) +
+  scale_y_continuous(breaks=seq(0,.650,.025)) +
+  theme(plot.title = element_text(face='bold',hjust = 0.5))  +
+  theme(legend.position = "none") +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        strip.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        plot.title = element_text(size = 12))
+
+
+```
+
+</center>
+
